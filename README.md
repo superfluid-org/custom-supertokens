@@ -157,3 +157,11 @@ Its `mint()` and `burn()` match those of IXERC20, but it adds `bridge()` (addres
 
 Is a plain OpenZeppelin based ERC20 with ERC20Votes extension.
 It's suitable for multichain token deployments which want an ERC20 representation on L1 and Super Token representations on L2s.
+
+### Arbitrum Bridge
+
+We need to use the [generic custom gateway](https://docs.arbitrum.io/build-decentralized-apps/token-bridging/token-bridge-erc20#the-arbitrum-generic-custom-gateway)
+
+The L2 token needs to implement [IArbToken](https://github.com/OffchainLabs/token-bridge-contracts/blob/main/contracts/tokenbridge/arbitrum/IArbToken.sol).
+
+
