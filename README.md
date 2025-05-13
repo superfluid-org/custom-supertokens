@@ -146,6 +146,13 @@ To learn more about Custom Super Tokens, check the following resources:
 The core functions are `mint` and `burn`. They leverage the hooks `selfMint` and `selfBurn` provided by the canonical Super Token implementation.
 The rest of the logic is mostly about setting and enforcing rate limits per bridge. The limits are defined as the maximum token amount a bridge can mint or burn per 24 hours (rolling time window).
 
+### HomeERC20
+
+Is a plain OpenZeppelin based ERC20 with ERC20Votes extension.
+It's suitable for multichain token deployments which want an ERC20 representation on L1 and Super Token representations on L2s.
+
+TODO: for tokens which shall be bridged to Arbitrum, add self-registration with the Arbitrum Gateway.
+
 ### Optimism / Superchain Standard Bridge
 
 L2's based on the OP / Superchain stack can use the native [Standard Bridge](https://docs.optimism.io/builders/app-developers/bridging/standard-bridge) for maximum security.
@@ -153,14 +160,13 @@ L2's based on the OP / Superchain stack can use the native [Standard Bridge](htt
 [OPBridgedSuperToken.sol](src/xchain/OPBridgedSuperToken.sol) allows that by implementing the required ´IOptimismMintableERC20` interface.
 Its `mint()` and `burn()` match those of IXERC20, but it adds `bridge()` (address of the bridge contract), `remoteToken()` (address of the token on L1) and `supportsInterface()` (ERC165 interface detection).
 
-### HomeERC20
-
-Is a plain OpenZeppelin based ERC20 with ERC20Votes extension.
-It's suitable for multichain token deployments which want an ERC20 representation on L1 and Super Token representations on L2s.
+Note that the L1 OP bridge allows the caller to specify the L2 token to bridge to, so no onchain token _pairing_ is required.
+However you may want to make the token available in the canonical bridge UI [superbridge.app](https://superbridge.app/) by making a PR to [its tokenlist repo](https://github.com/superbridgeapp/token-lists/).
 
 ### Arbitrum Bridge
 
-We need to use the [generic custom gateway](https://docs.arbitrum.io/build-decentralized-apps/token-bridging/token-bridge-erc20#the-arbitrum-generic-custom-gateway)
+We need to use the [generic custom gateway](https://docs.arbitrum.io/build-decentralized-apps/token-bridging/token-bridge-erc20#the-arbitrum-generic-custom-gateway).
+Note that the L1 token needs to register itself by calling `L1CustomGateway.registerTokenToL2`. If that's not possible, a DAO gov action is needed for registration.
 
 The L2 token needs to implement [IArbToken](https://github.com/OffchainLabs/token-bridge-contracts/blob/main/contracts/tokenbridge/arbitrum/IArbToken.sol).
 
