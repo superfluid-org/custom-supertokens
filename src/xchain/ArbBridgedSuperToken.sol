@@ -22,17 +22,17 @@ contract ArbBridgedSuperTokenProxy is BridgedSuperTokenProxy, IArbToken {
     // ===== IArbToken =====
 
     /// @inheritdoc IArbToken
-    function bridgeMint(address account, uint256 amount) external {
+    function bridgeMint(address account, uint256 amount) external override {
         return super.mint(account, amount);
     }
 
     /// @inheritdoc IArbToken
-    function bridgeBurn(address account, uint256 amount) external {
+    function bridgeBurn(address account, uint256 amount) external override {
         return super.burn(account, amount);
     }
 
     /// @inheritdoc IArbToken
-    function l1Address() external view returns (address) {
+    function l1Address() external view override returns (address) {
         return _REMOTE_TOKEN;
     }
 }
