@@ -13,7 +13,7 @@ contract ArbBridgedSuperTokenTest is BridgedSuperTokenTest {
         // deploy proxy
         ArbBridgedSuperTokenProxy proxy = new ArbBridgedSuperTokenProxy(_nativeBridge, _remoteToken);
         // initialize proxy
-        proxy.initialize(sf.superTokenFactory, "Test Token", "TT", _owner, 1000);
+        proxy.initialize(sf.superTokenFactory, "Test Token", "TT", owner, 1000);
         proxy.transferOwnership(owner);
 
         _arbToken = IArbBridgedSuperToken(address(proxy));
