@@ -18,7 +18,7 @@ contract BridgedSuperTokenTest is Test {
         // deploy proxy
         BridgedSuperTokenProxy proxy = new BridgedSuperTokenProxy();
         // initialize proxy
-        proxy.initialize(sf.superTokenFactory, "Test Token", "TT", _owner, 1000);
+        proxy.initialize(sf.superTokenFactory, "Test Token", "TT", owner, 1000);
         proxy.transferOwnership(owner);
 
         _xerc20 = IBridgedSuperToken(address(proxy));
