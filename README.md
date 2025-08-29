@@ -11,9 +11,9 @@ A _custom_ Super Token has custom logic added to this proxy contract.
 
 [PureSuperToken.sol](src/PureSuperToken.sol) is the simplest variant of a custom SuperToken. It's a _Pure SuperToken_ (no underlying ERC20) which has its supply minted on creation.
 
-[PureSuperTokenPermit.sol](src/PureSuperTokenPermit.sol) is is a Pure SuperToken which also implements IERC20Permit.
+[PureSuperTokenPermit.sol](src/PureSuperTokenPermit.sol) is a Pure SuperToken which also implements IERC20Permit.
 
-[CustomERC20WrapperProxy.sol](src/CustomERC20WrapperProxy.sol) shows how a _Wrapper SuperToken_ (has an unerlying ERC20) could be customized.
+[CustomERC20WrapperProxy.sol](src/CustomERC20WrapperProxy.sol) shows how a _Wrapper SuperToken_ (has an underlying ERC20) could be customized.
 
 [xchain](src/xchain) contains more advanced variants of Custom SuperTokens, suited for cross-chain deployments (e.g. bridging ERC20 <-> SuperToken). See [the dedicated section](#bridging-with-xerc20) for more.
 
