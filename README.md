@@ -125,10 +125,11 @@ forge test
 
 ## Deployment
 
-There are multiple ways to manage the deployment of a Custom Super Token. One of them is using the following command line by replacing the proper arguments with your requirements:
+Use the foundry script [Deploy.s.sol](script/Deploy.s.sol) with the config in env vars.
 
-```bash
-forge create --rpc-url <RPC_URL_OF_DESIRED_CHAIN> --private-key <YOUR_PRIVATE_KEY> --etherscan-api-key <YOUR_ETHERSCAN_API_KEY> --verify --via-ir src/PureSuperToken.sol:PureSuperTokenProxy
+Example invocation:
+```
+OWNER=$ADMIN_ADDRESS NAME=Test SYMBOL=TT SUPERTOKEN_FACTORY=0xfcF0489488397332579f35b0F711BE570Da0E8f5 forge script --rpc-url https://sepolia.optimism.io --etherscan-api-key $ETHERSCAN_API_KEY --broadcast --account my-deployer script/Deploy.s.sol:DeployPureSuperToken
 ```
 
 ## Learn more about Custom Super Tokens
