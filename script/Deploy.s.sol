@@ -4,6 +4,7 @@ pragma solidity ^0.8.23;
 import "forge-std/Script.sol";
 import {
     ISuperTokenFactory,
+    ISuperToken,
     IERC20Metadata
 } from "@superfluid-finance/ethereum-contracts/contracts/interfaces/superfluid/ISuperfluid.sol";
 import { BridgedSuperTokenProxy, IBridgedSuperToken } from "../src/xchain/BridgedSuperToken.sol";
@@ -16,6 +17,7 @@ import { CustomERC20WrapperProxy, ICustomERC20Wrapper } from "../src/CustomERC20
 /// abstract base contract to avoid code duplication
 abstract contract DeployBase is Script {
     uint256 deployerPrivKey;
+    address superTokenFactoryAddr;
     address owner;
     string name;
     string symbol;
@@ -26,6 +28,8 @@ abstract contract DeployBase is Script {
         // If PRIVKEY is set, use it; otherwise use default account (from --account flag)
         deployerPrivKey = vm.envOr("PRIVKEY", uint256(0));
         
+        // factory
+        superTokenFactoryAddr = vm.envOr("SUPERTOKEN_FACTORY", address(0));
         owner = vm.envAddress("OWNER");
         name = vm.envString("NAME");
         symbol = vm.envString("SYMBOL");
@@ -42,22 +46,28 @@ abstract contract DeployBase is Script {
     }
     
 
-    /// @notice Verifies that the proxy's implementation matches the canonical SuperToken implementation.
+    /// @notice Verifies that 
+    /// - the proxy's implementation matches the canonical SuperToken implementation.
     /// This gives more reassurance that the proxy wasn't tampered with by a fruntrunner.
     /// The proxy implementation used here shouldn't be susceptible to this - meaning, "initialize()" is expected
     /// to revert in case of frontrunning, because not relying on implementation contract logic
     /// for setting the pointer. But it doesn't hurt to be extra cautious.
     /// See https://dedaub.com/blog/the-cpimp-attack-an-insanely-far-reaching-vulnerability-successfully-mitigated/
+    /// - the SuperToken has been initialized as intended
     /// @param proxy The proxy contract address to verify
-    /// @param factory The SuperTokenFactory address to get the canonical implementation from
-    function _verifyProxyImplementation(address proxy, ISuperTokenFactory factory) internal view {
+    function _verifyDeployment(address proxy) internal view {
         bytes32 EIP_1967_IMPLEMENTATION_SLOT = 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
         address proxyImpl = address(uint160(uint256(vm.load(proxy, EIP_1967_IMPLEMENTATION_SLOT))));
-        address canonicalImpl = address(factory.getSuperTokenLogic());
+        address canonicalImpl = address((ISuperTokenFactory(superTokenFactoryAddr)).getSuperTokenLogic());
         require(
             proxyImpl == canonicalImpl,
             "unexpected implementation set in proxy, doesn't match canonical SuperToken implementation"
         );
+        ISuperToken token = ISuperToken(proxy);
+        require(keccak256(abi.encodePacked(token.name())) == keccak256(abi.encodePacked(name)), "name mismatch");
+        require(keccak256(abi.encodePacked(token.symbol())) == keccak256(abi.encodePacked(symbol)), "symbol mismatch");
+        require(token.totalSupply() == initialSupply, "totalSupply mismatch");
+        require(token.balanceOf(owner) == initialSupply, "balanceOf mismatch");
     }
 }
 
@@ -84,23 +94,71 @@ contract DeployL1Token is DeployBase {
     }
 }
 
+/// Factory for atomic BridgedSuperTokenProxy deployment + initialization in one transaction.
+contract BridgedSuperTokenFactory {
+    BridgedSuperTokenProxy public proxy;
+    constructor(
+        address superTokenFactoryAddr,
+        string memory name,
+        string memory symbol,
+        address owner,
+        uint256 initialSupply
+    ) {
+        proxy = new BridgedSuperTokenProxy();
+        proxy.initialize(
+            ISuperTokenFactory(superTokenFactoryAddr),
+            name,
+            symbol,
+            owner,
+            initialSupply
+        );
+        proxy.transferOwnership(owner);
+    }
+}
+
 /// deploys and initializes an instance of BridgedSuperTokenProxy
 contract DeployL2Token is DeployBase {
     function run() external {
         _loadEnv();
 
-        address superTokenFactoryAddr = vm.envAddress("SUPERTOKEN_FACTORY");
-
         _startBroadcast();
 
-        BridgedSuperTokenProxy proxy = new BridgedSuperTokenProxy();
-        proxy.initialize(ISuperTokenFactory(superTokenFactoryAddr), name, symbol, owner, initialSupply);
-        proxy.transferOwnership(owner);
-        console.log("BridgedSuperTokenProxy deployed at", address(proxy));
+        BridgedSuperTokenFactory factory = new BridgedSuperTokenFactory(
+            superTokenFactoryAddr,
+            name,
+            symbol,
+            owner,
+            initialSupply
+        );
+        console.log("BridgedSuperTokenProxy deployed at", address(factory.proxy()));
 
         vm.stopBroadcast();
 
-        _verifyProxyImplementation(address(proxy), ISuperTokenFactory(superTokenFactoryAddr));
+        _verifyDeployment(address(factory.proxy()));
+    }
+}
+
+/// Factory for atomic OPBridgedSuperTokenProxy deployment + initialization in one transaction.
+contract OPBridgedSuperTokenFactory {
+    OPBridgedSuperTokenProxy public proxy;
+    constructor(
+        address nativeBridge,
+        address remoteToken,
+        address superTokenFactoryAddr,
+        string memory name,
+        string memory symbol,
+        address owner,
+        uint256 initialSupply
+    ) {
+        proxy = new OPBridgedSuperTokenProxy(nativeBridge, remoteToken);
+        proxy.initialize(
+            ISuperTokenFactory(superTokenFactoryAddr),
+            name,
+            symbol,
+            owner,
+            initialSupply
+        );
+        proxy.transferOwnership(owner);
     }
 }
 
@@ -111,18 +169,47 @@ contract DeployOPToken is DeployBase {
 
         _startBroadcast();
 
-        address superTokenFactoryAddr = vm.envAddress("SUPERTOKEN_FACTORY");
         address nativeBridge = vm.envAddress("NATIVE_BRIDGE");
         address remoteToken = vm.envAddress("REMOTE_TOKEN");
 
-        OPBridgedSuperTokenProxy proxy = new OPBridgedSuperTokenProxy(nativeBridge, remoteToken);
-        proxy.initialize(ISuperTokenFactory(superTokenFactoryAddr), name, symbol, owner, initialSupply);
-        proxy.transferOwnership(owner);
-        console.log("OPBridgedSuperTokenProxy deployed at", address(proxy));
+        OPBridgedSuperTokenFactory factory = new OPBridgedSuperTokenFactory(
+            nativeBridge,
+            remoteToken,
+            superTokenFactoryAddr,
+            name,
+            symbol,
+            owner,
+            initialSupply
+        );
+        console.log("OPBridgedSuperTokenProxy deployed at", address(factory.proxy()));
 
         vm.stopBroadcast();
 
-        _verifyProxyImplementation(address(proxy), ISuperTokenFactory(superTokenFactoryAddr));
+        _verifyDeployment(address(factory.proxy()));
+    }
+}
+
+/// Factory for atomic ArbBridgedSuperTokenProxy deployment + initialization in one transaction.
+contract ArbBridgedSuperTokenFactory {
+    ArbBridgedSuperTokenProxy public proxy;
+    constructor(
+        address nativeBridge,
+        address remoteToken,
+        address superTokenFactoryAddr,
+        string memory name,
+        string memory symbol,
+        address owner,
+        uint256 initialSupply
+    ) {
+        proxy = new ArbBridgedSuperTokenProxy(nativeBridge, remoteToken);
+        proxy.initialize(
+            ISuperTokenFactory(superTokenFactoryAddr),
+            name,
+            symbol,
+            owner,
+            initialSupply
+        );
+        proxy.transferOwnership(owner);
     }
 }
 
@@ -133,18 +220,44 @@ contract DeployArbToken is DeployBase {
         
         _startBroadcast();
 
-        address superTokenFactoryAddr = vm.envAddress("SUPERTOKEN_FACTORY");
         address nativeBridge = vm.envAddress("NATIVE_BRIDGE");
         address remoteToken = vm.envAddress("REMOTE_TOKEN");
 
-        ArbBridgedSuperTokenProxy proxy = new ArbBridgedSuperTokenProxy(nativeBridge, remoteToken);
-        proxy.initialize(ISuperTokenFactory(superTokenFactoryAddr), name, symbol, owner, initialSupply);
-        proxy.transferOwnership(owner);
-        console.log("ArbBridgedSuperTokenProxy deployed at", address(proxy));
+        ArbBridgedSuperTokenFactory factory = new ArbBridgedSuperTokenFactory(
+            nativeBridge,
+            remoteToken,
+            superTokenFactoryAddr,
+            name,
+            symbol,
+            owner,
+            initialSupply
+        );
+        console.log("ArbBridgedSuperTokenProxy deployed at", address(factory.proxy()));
 
         vm.stopBroadcast();
 
-        _verifyProxyImplementation(address(proxy), ISuperTokenFactory(superTokenFactoryAddr));
+        _verifyDeployment(address(factory.proxy()));
+    }
+}
+
+/// Factory for atomic proxy deployment + initialization in one transaction.
+contract PureSuperTokenFactory {
+    PureSuperTokenProxy public proxy;
+    constructor(
+        address superTokenFactoryAddr,
+        string memory name,
+        string memory symbol,
+        address owner,
+        uint256 initialSupply
+    ) {
+        proxy = new PureSuperTokenProxy();
+        PureSuperTokenProxy(proxy).initialize(
+            ISuperTokenFactory(superTokenFactoryAddr),
+            name,
+            symbol,
+            owner,
+            initialSupply
+        );
     }
 }
 
@@ -152,8 +265,6 @@ contract DeployArbToken is DeployBase {
 contract DeployPureSuperToken is DeployBase {
     function run() external {
         _loadEnv();
-
-        address superTokenFactoryAddr = vm.envAddress("SUPERTOKEN_FACTORY");
 
         _startBroadcast();
 
@@ -164,13 +275,39 @@ contract DeployPureSuperToken is DeployBase {
         console.log("  initialSupply:", initialSupply);
         console.log("  receiver:", owner);
 
-        PureSuperTokenProxy proxy = new PureSuperTokenProxy();
-        proxy.initialize(ISuperTokenFactory(superTokenFactoryAddr), name, symbol, owner, initialSupply);
-        console.log("PureSuperTokenProxy deployed at", address(proxy));
+        // PureSuperTokenProxy proxy = new PureSuperTokenProxy();
+        // proxy.initialize(ISuperTokenFactory(superTokenFactoryAddr), name, symbol, owner, initialSupply);
+        PureSuperTokenFactory factory = new PureSuperTokenFactory(
+            superTokenFactoryAddr,
+            name,
+            symbol,
+            owner,
+            initialSupply
+        );
+        console.log("PureSuperTokenProxy deployed at", address(factory.proxy()));
 
         vm.stopBroadcast();
 
-        _verifyProxyImplementation(address(proxy), ISuperTokenFactory(superTokenFactoryAddr));
+        _verifyDeployment(address(factory.proxy()));
+    }
+}
+
+/// Factory for atomic CustomERC20WrapperProxy deployment + initialization in one transaction.
+contract CustomERC20WrapperFactory {
+    CustomERC20WrapperProxy public proxy;
+    constructor(
+        address underlyingTokenAddr,
+        address superTokenFactoryAddr,
+        string memory name,
+        string memory symbol
+    ) {
+        proxy = new CustomERC20WrapperProxy();
+        proxy.initialize(
+            IERC20Metadata(underlyingTokenAddr),
+            ISuperTokenFactory(superTokenFactoryAddr),
+            name,
+            symbol
+        );
     }
 }
 
@@ -179,7 +316,6 @@ contract DeployCustomERC20Wrapper is DeployBase {
     function run() external {
         _loadEnv();
 
-        address superTokenFactoryAddr = vm.envAddress("SUPERTOKEN_FACTORY");
         address underlyingTokenAddr = vm.envAddress("UNDERLYING_TOKEN");
 
         _startBroadcast();
@@ -190,17 +326,16 @@ contract DeployCustomERC20Wrapper is DeployBase {
         console.log("  symbol:", symbol);
         console.log("  underlyingToken:", underlyingTokenAddr);
 
-        CustomERC20WrapperProxy proxy = new CustomERC20WrapperProxy();
-        proxy.initialize(
-            IERC20Metadata(underlyingTokenAddr),
-            ISuperTokenFactory(superTokenFactoryAddr),
+        CustomERC20WrapperFactory factory = new CustomERC20WrapperFactory(
+            underlyingTokenAddr,
+            superTokenFactoryAddr,
             name,
             symbol
         );
-        console.log("CustomERC20WrapperProxy deployed at", address(proxy));
+        console.log("CustomERC20WrapperProxy deployed at", address(factory.proxy()));
 
         vm.stopBroadcast();
 
-        _verifyProxyImplementation(address(proxy), ISuperTokenFactory(superTokenFactoryAddr));
+        _verifyDeployment(address(factory.proxy()));
     }
 }
